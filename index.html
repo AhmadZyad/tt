@@ -103,12 +103,12 @@
                 </div>
 
                 <!-- Action Button -->
-                <button onclick="simulateProcess()" id="mainBtn" class="gradient-primary w-full py-6 rounded-3xl text-white text-2xl font-bold shadow-2xl hover:shadow-indigo-200 transition-all active:scale-[0.97] flex justify-center items-center gap-4">
+                <button onclick="processDownload()" id="mainBtn" class="gradient-primary w-full py-6 rounded-3xl text-white text-2xl font-bold shadow-2xl hover:shadow-indigo-200 transition-all active:scale-[0.97] flex justify-center items-center gap-4">
                     <i class="fas fa-arrow-down"></i>
                     <span>دەستپێکردن</span>
                 </button>
                 
-                <!-- Simulation Box (Processing) -->
+                <!-- Simulation/Processing Box -->
                 <div id="simulation-box" class="hidden flex flex-col items-center py-12 bg-slate-50 rounded-[2.5rem] border border-slate-100 animate-up">
                     <div class="loader rounded-full border-4 border-t-4 border-slate-200 h-20 w-20 mb-8"></div>
                     <div class="text-center w-full px-10">
@@ -120,7 +120,7 @@
                     </div>
                 </div>
 
-                <!-- Final Facade Result -->
+                <!-- Final Result (Hidden link, direct download button) -->
                 <div id="result-box" class="hidden animate-up">
                     <div class="p-10 bg-indigo-900 rounded-[3rem] text-center shadow-2xl relative overflow-hidden">
                         <div class="relative z-10">
@@ -128,13 +128,12 @@
                                 <i class="fas fa-check-double text-5xl"></i>
                             </div>
                             <h3 class="text-white font-bold text-3xl mb-3">بە سەرکەوتوویی دۆزرایەوە!</h3>
-                            <p class="text-indigo-200 font-medium mb-10 text-sm px-4">بۆ پاراستنی کوالیتی ڤیدیۆکە، لە ڕێگەی سێرڤەری تایبەتەوە پاشەکەوتی بکە</p>
+                            <p class="text-indigo-200 font-medium mb-10 text-sm px-4">ڤیدیۆکە ئامادەیە، ئێستا دەتوانیت ڕاستەوخۆ دایبگریت</p>
                             
-                            <button id="redirectBtn" class="bg-white text-indigo-900 w-full py-6 rounded-3xl font-bold text-2xl shadow-xl hover:bg-slate-100 transition-all flex justify-center items-center gap-4 active:scale-95">
-                                <i class="fas fa-external-link-alt"></i> پاشەکەوتکردن (Final Save)
+                            <button id="finalDownloadBtn" class="bg-white text-indigo-900 w-full py-6 rounded-3xl font-bold text-2xl shadow-xl hover:bg-slate-100 transition-all flex justify-center items-center gap-4 active:scale-95">
+                                <i class="fas fa-save"></i> پاشەکەوتکردن (Download)
                             </button>
                         </div>
-                        <!-- Decorative background -->
                         <div class="absolute -bottom-10 -right-10 w-40 h-40 bg-white/5 rounded-full blur-3xl"></div>
                     </div>
                     
@@ -143,10 +142,10 @@
                     </button>
                 </div>
 
-                <!-- Error (Hidden) -->
+                <!-- Error Box -->
                 <div id="error-box" class="hidden p-6 bg-rose-50 text-rose-700 rounded-3xl text-center text-sm border border-rose-100 font-bold">
                     <i class="fas fa-exclamation-circle ml-2"></i>
-                    لینکی داواکراو چالاک نییە، تکایە لینکێکی تر تاقی بکەرەوە.
+                    <span id="error-msg">لینکی داواکراو چالاک نییە یان سێرڤەر قەرەباڵغە.</span>
                 </div>
             </div>
         </div>
@@ -154,7 +153,7 @@
 
     <!-- Footer -->
     <footer class="mt-auto py-12 text-slate-400 text-center w-full max-w-2xl px-6 border-t border-slate-200">
-        <p class="text-[10px] font-bold uppercase tracking-[0.5em] opacity-50 mb-4">Secure Gateway System</p>
+        <p class="text-[10px] font-bold uppercase tracking-[0.5em] opacity-50 mb-4">Secure Private Downloader</p>
         <div class="flex justify-center gap-8 opacity-20 text-2xl">
             <i class="fab fa-tiktok"></i>
             <i class="fab fa-instagram"></i>
@@ -163,7 +162,7 @@
     </footer>
 
     <script>
-        const BOLTA_URL = "https://bolta.ai/public-apps/video-downloader";
+        const RAPID_API_KEY = "388f4d47bcmsh963828059202238p14af37jsnd27b81433f77";
 
         function closeSplash() {
             const splash = document.getElementById('splash-screen');
@@ -172,10 +171,12 @@
             setTimeout(() => splash.style.display = 'none', 800);
         }
 
-        async function simulateProcess() {
-            const url = document.getElementById('videoUrl').value.trim();
+        async function processDownload() {
+            const urlInput = document.getElementById('videoUrl');
+            const url = urlInput.value.trim();
             const loading = document.getElementById('simulation-box');
             const result = document.getElementById('result-box');
+            const errorBox = document.getElementById('error-box');
             const mainBtn = document.getElementById('mainBtn');
             const status = document.getElementById('status-text');
             const bar = document.getElementById('bar');
@@ -185,30 +186,83 @@
 
             mainBtn.style.display = 'none';
             loading.classList.remove('hidden');
+            errorBox.classList.add('hidden');
             
-            // Simulation Stages
-            const stages = [
-                { p: 20, t: "خەریکی شیکردنەوەی ڤیدیۆکەین...", s: "Fetching metadata..." },
-                { p: 50, t: "تێپەڕاندنی پاراستنی سێرڤەر...", s: "Bypassing server security..." },
-                { p: 80, t: "ئامادەکردنی کوالیتی بەرز (HD)...", s: "Optimizing video quality..." },
-                { p: 100, t: "تەواو بوو! ڤیدیۆکە ئامادەیە.", s: "Ready for secure export." }
-            ];
+            try {
+                // Stage 1: Analyze
+                status.innerText = "خەریکی شیکردنەوەی لینکەکەین...";
+                bar.style.width = "20%";
+                await new Promise(r => setTimeout(r, 1000));
 
-            for(let stage of stages) {
-                status.innerText = stage.t;
-                sub.innerText = stage.s;
-                bar.style.width = stage.p + "%";
+                // Call API in the background while simulating
+                const apiResponse = await fetch('https://auto-download-all-in-one.p.rapidapi.com/v1/social/autolink', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-rapidapi-host': 'auto-download-all-in-one.p.rapidapi.com',
+                        'x-rapidapi-key': RAPID_API_KEY
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+
+                const data = await apiResponse.json();
+                let videoLink = null;
+
+                if (data.medias && data.medias.length > 0) {
+                    const best = data.medias.find(m => m.type === 'video' || m.extension === 'mp4') || data.medias[0];
+                    videoLink = best.url;
+                } else if (data.url) {
+                    videoLink = data.url;
+                }
+
+                if (!videoLink) throw new Error("Video not found");
+
+                // Stage 2: Security Bypass
+                status.innerText = "تێپەڕاندنی پاراستنی سێرڤەر...";
+                sub.innerText = "Bypassing anti-bot systems...";
+                bar.style.width = "60%";
                 await new Promise(r => setTimeout(r, 1200));
-            }
 
-            loading.classList.add('hidden');
-            result.classList.remove('hidden');
-            
-            // Configure Redirect Button
-            document.getElementById('redirectBtn').onclick = () => {
-                // نفتح الموقع الحقيقي في تبويب جديد لإتمام العملية
-                window.open(BOLTA_URL, '_blank');
-            };
+                // Stage 3: Ready
+                status.innerText = "ئامادەکردنی فایل بۆ پاشەکەوتکردن...";
+                sub.innerText = "Preparing high-quality stream...";
+                bar.style.width = "100%";
+                await new Promise(r => setTimeout(r, 800));
+
+                loading.classList.add('hidden');
+                result.classList.remove('hidden');
+
+                // Attach direct download logic to the button
+                document.getElementById('finalDownloadBtn').onclick = () => performDirectDownload(videoLink);
+
+            } catch (err) {
+                loading.classList.add('hidden');
+                errorBox.classList.remove('hidden');
+                mainBtn.style.display = 'flex';
+                console.error(err);
+            }
+        }
+
+        async function performDirectDownload(fileUrl) {
+            try {
+                // Try to download as blob first for better UX
+                const response = await fetch(fileUrl);
+                const blob = await response.blob();
+                const localUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = localUrl;
+                a.download = `video_${Date.now()}.mp4`;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    window.URL.revokeObjectURL(localUrl);
+                    document.body.removeChild(a);
+                }, 100);
+            } catch (e) {
+                // Fallback for CORS issues
+                window.open(fileUrl, '_blank');
+            }
         }
 
         function resetUI() {
