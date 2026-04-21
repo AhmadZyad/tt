@@ -88,7 +88,7 @@
             <!-- Loading -->
             <div id="loading" class="hidden flex flex-col items-center gap-4 mt-4 py-4">
                 <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12"></div>
-                <p class="text-indigo-600 font-bold">تکایە چاوەڕوانبە، ڤیدیۆکە بەبێ نیشانە ئامادە دەکرێت...</p>
+                <p class="text-indigo-600 font-bold">تکایە چاوەڕوانبە، ڤیدیۆکە چارەسەر دەکرێت...</p>
             </div>
 
             <!-- Error Message -->
@@ -102,15 +102,21 @@
                 <div class="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
                     <i class="fas fa-check text-2xl"></i>
                 </div>
-                <h3 class="text-green-800 font-bold text-xl mb-4">ڤیدیۆکە بەبێ لۆگۆ ئامادەیە!</h3>
+                <h3 class="text-green-800 font-bold text-xl mb-4">ڤیدیۆکە ئامادەیە!</h3>
                 <div class="flex flex-col gap-3">
+                    <!-- زر التحميل الحقيقي -->
                     <button id="finalDownloadBtn" class="bg-green-600 text-white py-4 rounded-2xl font-bold hover:bg-green-700 transition-all flex justify-center items-center gap-2 shadow-md">
                         <i class="fas fa-file-arrow-down"></i>
-                        دابەزاندن (Download)
+                        دابەزاندنی ڤیدیۆکە (Download)
                     </button>
-                    <p id="fallbackText" class="hidden text-xs text-orange-600 mt-1 font-bold italic">ئەگەر دابەزاندن دەستی پێ نەکرد، کلیک لەسەر دوگمەکە بکە و بگرە (Hold) پاشان 'Save Link' هەڵبژێرە.</p>
-                    <button onclick="resetUI()" class="text-gray-500 hover:text-indigo-600 font-medium text-sm mt-2 transition-colors">
-                        <i class="fas fa-redo ml-1"></i> دابەزاندنی ڤیدیۆیەکی تر
+                    
+                    <div id="instructionText" class="text-xs text-orange-700 mt-2 bg-orange-50 p-2 rounded-lg border border-orange-100 hidden">
+                        <i class="fas fa-info-circle ml-1"></i>
+                        ئەگەر دابەزاندن دەستی پێ نەکرد، کلیک لەسەر دوگمەکە بکە و بگرە (Hold) پاشان "Download link" هەڵبژێرە.
+                    </div>
+
+                    <button onclick="resetUI()" class="text-gray-400 hover:text-indigo-600 font-medium text-sm mt-4 transition-colors">
+                        <i class="fas fa-redo ml-1"></i> دووبارە تاقیکردنەوە
                     </button>
                 </div>
             </div>
@@ -153,75 +159,82 @@
                     body: JSON.stringify({ url: url })
                 });
 
-                const data = await response.json();
-                let videoUrl = null;
+                if (!response.ok) throw new Error("API Response Error");
 
-                // لێکدانەوەی داتا بەپێی وەڵامی باوی API
-                if (data.url) {
-                    videoUrl = data.url;
-                } else if (data.medias && data.medias.length > 0) {
-                    const bestVideo = data.medias.find(m => m.type === 'video' || m.extension === 'mp4') || data.medias[0];
-                    videoUrl = bestVideo.url;
-                } else if (data.data && data.data.url) {
-                    videoUrl = data.data.url;
+                const data = await response.json();
+                let finalVideoUrl = null;
+
+                // التعامل مع بنية بيانات الـ API المختلفة
+                if (data.medias && data.medias.length > 0) {
+                    // البحث عن أفضل فيديو (بدون علامة مائية إن وجد)
+                    const video = data.medias.find(m => m.type === 'video' && m.quality === 'hd') || 
+                                  data.medias.find(m => m.type === 'video') || 
+                                  data.medias[0];
+                    finalVideoUrl = video.url;
+                } else if (data.url) {
+                    finalVideoUrl = data.url;
                 }
 
-                if (videoUrl) {
+                if (finalVideoUrl) {
                     const finalBtn = document.getElementById('finalDownloadBtn');
-                    // لێرەدا دەمانەوێت هەوڵی دابەزاندنی ڕاستەقینە بدەین
-                    finalBtn.onclick = () => downloadFile(videoUrl);
+                    const instruction = document.getElementById('instructionText');
+                    
+                    // إعداد وظيفة التحميل
+                    finalBtn.onclick = () => performDownload(finalVideoUrl);
+                    
                     resultBox.classList.remove('hidden');
-                    document.getElementById('fallbackText').classList.remove('hidden');
+                    instruction.classList.remove('hidden');
                 } else {
-                    throw new Error("نەتوانرا لینکی ڤیدیۆکە بدۆزرێتەوە");
+                    throw new Error("No video found");
                 }
 
             } catch (err) {
                 console.error(err);
                 errorMessage.classList.remove('hidden');
-                document.getElementById('errorText').innerText = "کێشەیەک لە پەیوەندی دروست بوو. تکایە لینکەکە بپشکنە.";
+                document.getElementById('errorText').innerText = "نەتوانرا ڤیدیۆکە بدۆزرێتەوە. تکایە لینکەکە بپشکنە.";
             } finally {
                 loading.classList.add('hidden');
                 downloadBtn.disabled = false;
             }
         }
 
-        // فەنکشنی نوێکراوە بۆ داگرتنی فایلەکە بەبێ ڕێڕەوکردن (Redirect)
-        async function downloadFile(fileUrl) {
+        // الوظيفة النهائية للتحميل
+        async function performDownload(fileUrl) {
             try {
-                const response = await fetch(fileUrl, { mode: 'cors' });
-                if (!response.ok) throw new Error('CORS blocked or Network error');
+                // محاولة التحميل عبر Fetch (الأفضل)
+                const response = await fetch(fileUrl);
+                if (!response.ok) throw new Error('Network response was not ok');
                 
                 const blob = await response.blob();
-                const localUrl = window.URL.createObjectURL(blob);
+                const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.style.display = 'none';
-                a.href = localUrl;
-                a.download = `video_${Date.now()}.mp4`;
+                a.href = url;
+                a.download = `video_download_${Date.now()}.mp4`;
                 document.body.appendChild(a);
                 a.click();
                 
                 setTimeout(() => {
-                    window.URL.revokeObjectURL(localUrl);
+                    window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
-                }, 100);
+                }, 200);
             } catch (e) {
-                console.warn("Direct fetch failed, trying standard download link method.");
-                // ئەگەر fetch سەرکەوتوو نەبوو، لینکی دابەزاندن دروست دەکەین
-                const a = document.createElement('a');
-                a.href = fileUrl;
-                a.setAttribute('download', '');
-                a.setAttribute('target', '_blank');
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+                console.warn("Blob download failed, using direct link fallback.", e);
+                // الحل البديل: التوجه للرابط مباشرة مع محاولة إجبار التحميل
+                const link = document.createElement('a');
+                link.href = fileUrl;
+                link.target = "_blank";
+                link.setAttribute('download', 'video.mp4');
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             }
         }
 
         function resetUI() {
             document.getElementById('videoUrl').value = "";
             document.getElementById('resultBox').classList.add('hidden');
-            document.getElementById('fallbackText').classList.add('hidden');
+            document.getElementById('errorMessage').classList.add('hidden');
         }
     </script>
 </body>
