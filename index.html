@@ -120,7 +120,7 @@
                     </div>
                 </div>
 
-                <!-- Final Result (Hidden link, direct download button) -->
+                <!-- Final Result (Direct download button) -->
                 <div id="result-box" class="hidden animate-up">
                     <div class="p-10 bg-indigo-900 rounded-[3rem] text-center shadow-2xl relative overflow-hidden">
                         <div class="relative z-10">
@@ -133,6 +133,10 @@
                             <button id="finalDownloadBtn" class="bg-white text-indigo-900 w-full py-6 rounded-3xl font-bold text-2xl shadow-xl hover:bg-slate-100 transition-all flex justify-center items-center gap-4 active:scale-95">
                                 <i class="fas fa-save"></i> پاشەکەوتکردن (Download)
                             </button>
+                            
+                            <div id="download-hint" class="hidden mt-4 p-3 bg-white/5 rounded-xl text-[11px] text-white/70 leading-relaxed border border-white/10">
+                                تێبینی: ئەگەر داگرتن دەستی پێ نەکرد، کلیک لەسەر دوگمەکە بکە و بگرە، پاشان "Download link" هەڵبژێرە.
+                            </div>
                         </div>
                         <div class="absolute -bottom-10 -right-10 w-40 h-40 bg-white/5 rounded-full blur-3xl"></div>
                     </div>
@@ -145,7 +149,7 @@
                 <!-- Error Box -->
                 <div id="error-box" class="hidden p-6 bg-rose-50 text-rose-700 rounded-3xl text-center text-sm border border-rose-100 font-bold">
                     <i class="fas fa-exclamation-circle ml-2"></i>
-                    <span id="error-msg">لینکی داواکراو چالاک نییە یان سێرڤەر قەرەباڵغە.</span>
+                    <span id="error-msg">لینکی داواکراو چالاک نییە یان سێرڤەر قەرەباڵغە. تکایە دووبارە هەوڵ بدەرەوە.</span>
                 </div>
             </div>
         </div>
@@ -187,15 +191,14 @@
             mainBtn.style.display = 'none';
             loading.classList.remove('hidden');
             errorBox.classList.add('hidden');
+            result.classList.add('hidden');
             
             try {
-                // Stage 1: Analyze
+                // Stage 1: Fetch and Analyze
                 status.innerText = "خەریکی شیکردنەوەی لینکەکەین...";
-                bar.style.width = "20%";
-                await new Promise(r => setTimeout(r, 1000));
+                bar.style.width = "30%";
 
-                // Call API in the background while simulating
-                const apiResponse = await fetch('https://auto-download-all-in-one.p.rapidapi.com/v1/social/autolink', {
+                const response = await fetch('https://auto-download-all-in-one.p.rapidapi.com/v1/social/autolink', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -205,69 +208,84 @@
                     body: JSON.stringify({ url: url })
                 });
 
-                const data = await apiResponse.json();
+                if (!response.ok) throw new Error("سێرڤەر وەڵامی نییە");
+
+                const data = await response.json();
                 let videoLink = null;
 
+                // Handle different response formats
                 if (data.medias && data.medias.length > 0) {
-                    const best = data.medias.find(m => m.type === 'video' || m.extension === 'mp4') || data.medias[0];
+                    const best = data.medias.find(m => (m.type === 'video' || m.extension === 'mp4') && m.quality === 'hd') || 
+                                 data.medias.find(m => m.type === 'video' || m.extension === 'mp4') || 
+                                 data.medias[0];
                     videoLink = best.url;
                 } else if (data.url) {
                     videoLink = data.url;
                 }
 
-                if (!videoLink) throw new Error("Video not found");
+                if (!videoLink) throw new Error("ڤیدیۆ نەدۆزرایەوە");
 
-                // Stage 2: Security Bypass
-                status.innerText = "تێپەڕاندنی پاراستنی سێرڤەر...";
-                sub.innerText = "Bypassing anti-bot systems...";
                 bar.style.width = "60%";
-                await new Promise(r => setTimeout(r, 1200));
-
-                // Stage 3: Ready
-                status.innerText = "ئامادەکردنی فایل بۆ پاشەکەوتکردن...";
-                sub.innerText = "Preparing high-quality stream...";
-                bar.style.width = "100%";
+                status.innerText = "تێپەڕاندنی پاراستنی سێرڤەر...";
+                sub.innerText = "Processing bypass...";
                 await new Promise(r => setTimeout(r, 800));
+
+                bar.style.width = "100%";
+                status.innerText = "ئامادەکردنی فایل بۆ پاشەکەوتکردن...";
+                await new Promise(r => setTimeout(r, 500));
 
                 loading.classList.add('hidden');
                 result.classList.remove('hidden');
 
-                // Attach direct download logic to the button
-                document.getElementById('finalDownloadBtn').onclick = () => performDirectDownload(videoLink);
+                const finalBtn = document.getElementById('finalDownloadBtn');
+                finalBtn.onclick = () => performDirectDownload(videoLink);
 
             } catch (err) {
+                console.error(err);
                 loading.classList.add('hidden');
                 errorBox.classList.remove('hidden');
                 mainBtn.style.display = 'flex';
-                console.error(err);
+                document.getElementById('error-msg').innerText = "هەڵەیەک ڕوویدا: " + (err.message || "لینکی نادروست");
             }
         }
 
         async function performDirectDownload(fileUrl) {
+            const hint = document.getElementById('download-hint');
             try {
-                // Try to download as blob first for better UX
+                // Try fetching as blob to bypass "open in new tab" behavior
                 const response = await fetch(fileUrl);
+                if (!response.ok) throw new Error("CORS or network error");
+                
                 const blob = await response.blob();
                 const localUrl = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.style.display = 'none';
                 a.href = localUrl;
-                a.download = `video_${Date.now()}.mp4`;
+                a.download = `video_download_${Date.now()}.mp4`;
                 document.body.appendChild(a);
                 a.click();
+                
                 setTimeout(() => {
                     window.URL.revokeObjectURL(localUrl);
                     document.body.removeChild(a);
                 }, 100);
             } catch (e) {
-                // Fallback for CORS issues
-                window.open(fileUrl, '_blank');
+                // Fallback: If blob fails, just open link and show hint
+                hint.classList.remove('hidden');
+                const a = document.createElement('a');
+                a.href = fileUrl;
+                a.target = '_blank';
+                a.setAttribute('download', ''); // Suggest download
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
             }
         }
 
         function resetUI() {
             document.getElementById('videoUrl').value = "";
             document.getElementById('result-box').classList.add('hidden');
+            document.getElementById('download-hint').classList.add('hidden');
             document.getElementById('mainBtn').style.display = 'flex';
             document.getElementById('bar').style.width = "0%";
             window.scrollTo({ top: 0, behavior: 'smooth' });
