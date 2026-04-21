@@ -108,6 +108,7 @@
                         <i class="fas fa-file-arrow-down"></i>
                         دابەزاندن (Download)
                     </button>
+                    <p id="fallbackText" class="hidden text-xs text-orange-600 mt-1 font-bold italic">ئەگەر دابەزاندن دەستی پێ نەکرد، کلیک لەسەر دوگمەکە بکە و بگرە (Hold) پاشان 'Save Link' هەڵبژێرە.</p>
                     <button onclick="resetUI()" class="text-gray-500 hover:text-indigo-600 font-medium text-sm mt-2 transition-colors">
                         <i class="fas fa-redo ml-1"></i> دابەزاندنی ڤیدیۆیەکی تر
                     </button>
@@ -142,7 +143,6 @@
             downloadBtn.disabled = true;
 
             try {
-                // بەکارهێنانی ئەو RapidAPI یەی کە ناردووتە
                 const response = await fetch('https://auto-download-all-in-one.p.rapidapi.com/v1/social/autolink', {
                     method: 'POST',
                     headers: {
@@ -154,14 +154,12 @@
                 });
 
                 const data = await response.json();
-
-                // دەرەنجامی زۆربەی ئەم API یانە یان ڕاستەوخۆ "url"ە یان لیستێکە لە "medias"
                 let videoUrl = null;
 
+                // لێکدانەوەی داتا بەپێی وەڵامی باوی API
                 if (data.url) {
                     videoUrl = data.url;
                 } else if (data.medias && data.medias.length > 0) {
-                    // گەڕان بەدوای ڤیدیۆی کوالیتی بەرز
                     const bestVideo = data.medias.find(m => m.type === 'video' || m.extension === 'mp4') || data.medias[0];
                     videoUrl = bestVideo.url;
                 } else if (data.data && data.data.url) {
@@ -170,8 +168,10 @@
 
                 if (videoUrl) {
                     const finalBtn = document.getElementById('finalDownloadBtn');
+                    // لێرەدا دەمانەوێت هەوڵی دابەزاندنی ڕاستەقینە بدەین
                     finalBtn.onclick = () => downloadFile(videoUrl);
                     resultBox.classList.remove('hidden');
+                    document.getElementById('fallbackText').classList.remove('hidden');
                 } else {
                     throw new Error("نەتوانرا لینکی ڤیدیۆکە بدۆزرێتەوە");
                 }
@@ -179,35 +179,49 @@
             } catch (err) {
                 console.error(err);
                 errorMessage.classList.remove('hidden');
-                document.getElementById('errorText').innerText = "هەڵەیەک ڕوویدا لە کاتی پەیوەندی بە سێرڤەر. تکایە دڵنیابەرەوە لە لینکەکە.";
+                document.getElementById('errorText').innerText = "کێشەیەک لە پەیوەندی دروست بوو. تکایە لینکەکە بپشکنە.";
             } finally {
                 loading.classList.add('hidden');
                 downloadBtn.disabled = false;
             }
         }
 
-        // فەنکشن بۆ دابەزاندنی ڕاستەقینەی فایلەکە
+        // فەنکشنی نوێکراوە بۆ داگرتنی فایلەکە بەبێ ڕێڕەوکردن (Redirect)
         async function downloadFile(fileUrl) {
             try {
-                const response = await fetch(fileUrl);
+                const response = await fetch(fileUrl, { mode: 'cors' });
+                if (!response.ok) throw new Error('CORS blocked or Network error');
+                
                 const blob = await response.blob();
                 const localUrl = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
+                a.style.display = 'none';
                 a.href = localUrl;
                 a.download = `video_${Date.now()}.mp4`;
                 document.body.appendChild(a);
                 a.click();
-                window.URL.revokeObjectURL(localUrl);
-                document.body.removeChild(a);
+                
+                setTimeout(() => {
+                    window.URL.revokeObjectURL(localUrl);
+                    document.body.removeChild(a);
+                }, 100);
             } catch (e) {
-                // ئەگەر بەهۆی ڕێگرییەکانی سێرڤەرەوە نەبوو، لینکەکە بکەرەوە بۆ ئەوەی بەکارهێنەر بە دەستی دایبگرێت
-                window.open(fileUrl, '_blank');
+                console.warn("Direct fetch failed, trying standard download link method.");
+                // ئەگەر fetch سەرکەوتوو نەبوو، لینکی دابەزاندن دروست دەکەین
+                const a = document.createElement('a');
+                a.href = fileUrl;
+                a.setAttribute('download', '');
+                a.setAttribute('target', '_blank');
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
             }
         }
 
         function resetUI() {
             document.getElementById('videoUrl').value = "";
             document.getElementById('resultBox').classList.add('hidden');
+            document.getElementById('fallbackText').classList.add('hidden');
         }
     </script>
 </body>
